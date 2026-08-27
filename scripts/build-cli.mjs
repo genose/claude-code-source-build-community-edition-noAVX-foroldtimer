@@ -747,6 +747,23 @@ function finalizeBuild() {
     `  },\n` +
     `});\n` +
     `globalThis.MACRO ??= Object.freeze(${JSON.stringify(publicMacroValues, null, 2)});\n` +
+    `// Memory pressure watcher — warns before OOM crash in long sessions\n` +
+    `{\n` +
+    `  const { getHeapStatistics } = await import('node:v8');\n` +
+    `  const _heapLimit = getHeapStatistics().heap_size_limit;\n` +
+    `  let _memWarned = false;\n` +
+    `  setInterval(() => {\n` +
+    `    if (!_memWarned && process.memoryUsage().heapUsed > _heapLimit * 0.80) {\n` +
+    `      _memWarned = true;\n` +
+    `      const used = Math.round(process.memoryUsage().heapUsed / 1024 / 1024);\n` +
+    `      const limit = Math.round(_heapLimit / 1024 / 1024);\n` +
+    `      process.stderr.write(\n` +
+    `        \`\\n\\x1b[33m⚠  claudius: heap at \${used} MB / \${limit} MB — session memory high.\\x1b[0m\\n\` +\n` +
+    `        \`\\x1b[33m   Use /clear to free context or start a new session to avoid a crash.\\x1b[0m\\n\\n\`\n` +
+    `      );\n` +
+    `    }\n` +
+    `  }, 15000).unref();\n` +
+    `}\n` +
     `await import(${JSON.stringify(wrapperImportPath)});\n`;
 
   fs.mkdirSync(path.dirname(outputPath), { recursive: true });
