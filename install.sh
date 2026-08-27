@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 set -e
 
-REPO="https://github.com/genose/claude-code-source-build-community-edition-noAVX-foroldtimer.git"
-BRANCH="noavx_esbuild"
+REPO_API="https://api.github.com/repos/genose/claude-code-source-build-community-edition-noAVX-foroldtimer"
 INSTALL_DIR="${CLAUDIUS_INSTALL_DIR:-$HOME/.claudius}"
 CMD="claudius"
 
@@ -35,31 +34,35 @@ if [ "$NODE_MAJOR" -lt 20 ]; then
   exit 1
 fi
 
-# Check git
-if ! command -v git &>/dev/null; then
-  echo "Error: git is required but not found." >&2
+# Fetch latest release asset URL
+echo "==> Fetching latest release..."
+ASSET_URL=$(curl -fsSL "$REPO_API/releases/latest" | python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+for a in data.get('assets', []):
+    if a['name'].endswith('dist.tar.gz'):
+        print(a['browser_download_url'])
+        break
+")
+
+if [ -z "$ASSET_URL" ]; then
+  echo "Error: could not find dist tarball in latest release." >&2
   exit 1
 fi
 
-# Clone or update
-if [ -d "$INSTALL_DIR/.git" ]; then
-  echo "==> Updating existing install at $INSTALL_DIR"
-  git -C "$INSTALL_DIR" fetch origin "$BRANCH"
-  git -C "$INSTALL_DIR" checkout "$BRANCH"
-  git -C "$INSTALL_DIR" reset --hard "origin/$BRANCH"
-else
-  echo "==> Cloning repo..."
-  git clone --branch "$BRANCH" --depth 1 "$REPO" "$INSTALL_DIR"
-fi
+TAG=$(curl -fsSL "$REPO_API/releases/latest" | python3 -c "import json,sys; print(json.load(sys.stdin)['tag_name'])" 2>/dev/null || echo "unknown")
+echo "    Release     : $TAG"
+echo ""
 
-# Install dependencies (esbuild etc.)
-echo "==> Installing dependencies..."
-cd "$INSTALL_DIR"
-npm install --silent
-
-# Build
-echo "==> Building..."
-npm run build
+# Download and extract
+mkdir -p "$INSTALL_DIR"
+TMP_TAR=$(mktemp /tmp/claudius-dist.XXXXXX.tar.gz)
+echo "==> Downloading pre-built dist..."
+curl -fsSL --progress-bar -o "$TMP_TAR" "$ASSET_URL"
+echo "==> Extracting..."
+rm -rf "$INSTALL_DIR/dist"
+tar -xzf "$TMP_TAR" -C "$INSTALL_DIR"
+rm -f "$TMP_TAR"
 
 # Install wrapper
 mkdir -p "$BIN_DIR"
@@ -70,7 +73,6 @@ WRAPPER
 chmod +x "$BIN_DIR/$CMD"
 
 # Symlink 'claude' -> 'claudius' so VS Code / JetBrains extensions work without config changes.
-# Only created/updated if the target is absent or is already our symlink (never overwrites a real binary).
 if [ ! -e "$BIN_DIR/claude" ] || [ -L "$BIN_DIR/claude" ]; then
   ln -sf "$CMD" "$BIN_DIR/claude"
   echo "    Symlinked   : $BIN_DIR/claude -> $CMD"
