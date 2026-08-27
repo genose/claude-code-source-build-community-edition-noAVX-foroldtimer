@@ -52,11 +52,11 @@ Remove-Item -Force $TmpTar
 # Install wrapper
 New-Item -ItemType Directory -Force -Path $BinDir | Out-Null
 $wrapper = "$BinDir\$CMD.cmd"
-Set-Content -Path $wrapper -Value "@echo off`r`nnode `"$InstallDir\dist\cli.js`" %*"
+Set-Content -Path $wrapper -Value "@echo off`r`nnode --max-old-space-size=8192 `"$InstallDir\dist\cli.js`" %*"
 
 # Create claude.cmd -> claudius so VS Code / JetBrains extensions work without config changes.
 $claudeWrapper = "$BinDir\claude.cmd"
-$ourContent = "@echo off`r`nnode `"$InstallDir\dist\cli.js`" %*"
+$ourContent = "@echo off`r`nnode --max-old-space-size=8192 `"$InstallDir\dist\cli.js`" %*"
 if (-not (Test-Path $claudeWrapper) -or (Get-Content $claudeWrapper -Raw) -eq $ourContent) {
     Set-Content -Path $claudeWrapper -Value $ourContent
     Write-Host "    Also created: $claudeWrapper (claude -> claudius)"

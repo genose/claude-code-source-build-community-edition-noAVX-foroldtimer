@@ -68,7 +68,7 @@ rm -f "$TMP_TAR"
 mkdir -p "$BIN_DIR"
 cat > "$BIN_DIR/$CMD" <<WRAPPER
 #!/usr/bin/env bash
-exec node "$INSTALL_DIR/dist/cli.js" "\$@"
+exec node --max-old-space-size=8192 "$INSTALL_DIR/dist/cli.js" "\$@"
 WRAPPER
 chmod +x "$BIN_DIR/$CMD"
 
