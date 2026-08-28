@@ -748,22 +748,57 @@ function finalizeBuild() {
     `  },\n` +
     `});\n` +
     `globalThis.MACRO ??= Object.freeze(${JSON.stringify(publicMacroValues, null, 2)});\n` +
-    `// Memory pressure watcher — warns before OOM crash in long sessions\n` +
+    `// Session crash logger + memory pressure watcher\n` +
+    `// Per-session events → ~/.claudius/crash-<PID>.log\n` +
+    `// Fatal OOM/crash report → ~/.claudius/crash-report-<PID>.json (Node.js diagnostic)\n` +
     `{\n` +
     `  const { getHeapStatistics } = await import('node:v8');\n` +
+    `  const { appendFileSync, mkdirSync } = await import('node:fs');\n` +
+    `  const { homedir } = await import('node:os');\n` +
+    `  const _logDir = homedir() + '/.claudius';\n` +
+    `  const _logPath = _logDir + '/crash-' + process.pid + '.log';\n` +
+    `  const _logLine = (tag, msg) => {\n` +
+    `    try {\n` +
+    `      mkdirSync(_logDir, { recursive: true });\n` +
+    `      appendFileSync(_logPath, '[' + new Date().toISOString() + '] [' + tag + '] ' + msg + '\\n');\n` +
+    `    } catch (_) {}\n` +
+    `  };\n` +
     `  const _heapLimit = getHeapStatistics().heap_size_limit;\n` +
-    `  let _memWarned = false;\n` +
+    `  const _heapLimitMB = Math.round(_heapLimit / 1024 / 1024);\n` +
+    `  // Node.js diagnostic report on fatal errors (OOM, SIGSEGV, abort) — includes JS+native backtrace\n` +
+    `  try {\n` +
+    `    mkdirSync(_logDir, { recursive: true });\n` +
+    `    process.report.reportOnFatalError = true;\n` +
+    `    process.report.directory = _logDir;\n` +
+    `    process.report.filename = 'crash-report-' + process.pid + '.json';\n` +
+    `  } catch (_) {}\n` +
+    `  _logLine('START', 'pid=' + process.pid + ' heap_limit=' + _heapLimitMB + 'MB v=' + (globalThis.MACRO?.VERSION ?? '?'));\n` +
+    `  let _warned80 = false, _warned90 = false;\n` +
     `  setInterval(() => {\n` +
-    `    if (!_memWarned && process.memoryUsage().heapUsed > _heapLimit * 0.80) {\n` +
-    `      _memWarned = true;\n` +
-    `      const used = Math.round(process.memoryUsage().heapUsed / 1024 / 1024);\n` +
-    `      const limit = Math.round(_heapLimit / 1024 / 1024);\n` +
+    `    const _heapUsed = process.memoryUsage().heapUsed;\n` +
+    `    const usedMB = Math.round(_heapUsed / 1024 / 1024);\n` +
+    `    if (!_warned80 && _heapUsed > _heapLimit * 0.80) {\n` +
+    `      _warned80 = true;\n` +
+    `      _logLine('MEM_WARN_80', 'heap ' + usedMB + 'MB / ' + _heapLimitMB + 'MB');\n` +
     `      process.stderr.write(\n` +
-    `        \`\\n\\x1b[33m⚠  claudius: heap at \${used} MB / \${limit} MB — session memory high.\\x1b[0m\\n\` +\n` +
-    `        \`\\x1b[33m   Use /clear to free context or start a new session to avoid a crash.\\x1b[0m\\n\\n\`\n` +
+    `        '\\n\\x1b[33m⚠  claudius: heap at ' + usedMB + ' MB / ' + _heapLimitMB + ' MB — session memory high.\\x1b[0m\\n' +\n` +
+    `        '\\x1b[33m   Use /clear to free context or start a new session to avoid a crash.\\x1b[0m\\n\\n'\n` +
+    `      );\n` +
+    `    }\n` +
+    `    if (!_warned90 && _heapUsed > _heapLimit * 0.90) {\n` +
+    `      _warned90 = true;\n` +
+    `      _logLine('MEM_WARN_90', 'heap ' + usedMB + 'MB / ' + _heapLimitMB + 'MB — crash imminent, writing diagnostic report');\n` +
+    `      try { process.report.writeReport(); } catch (_) {}\n` +
+    `      process.stderr.write(\n` +
+    `        '\\n\\x1b[31m✖  claudius: heap at ' + usedMB + ' MB / ' + _heapLimitMB + ' MB — crash imminent!\\x1b[0m\\n' +\n` +
+    `        '\\x1b[31m   Diagnostic report written to ' + _logDir + '\\x1b[0m\\n' +\n` +
+    `        '\\x1b[31m   Start a new session immediately.\\x1b[0m\\n\\n'\n` +
     `      );\n` +
     `    }\n` +
     `  }, 15000).unref();\n` +
+    `  process.on('exit', (code) => {\n` +
+    `    _logLine('EXIT', 'code=' + code);\n` +
+    `  });\n` +
     `}\n` +
     `await import(${JSON.stringify(wrapperImportPath)});\n`;
 

@@ -125,6 +125,19 @@ CLAUDIUS_MAX_HEAP_MB=4096 claudius
 
 A memory pressure warning is printed to stderr when heap usage reaches 80% of the limit, before an OOM crash can occur.
 
+**Session crash log** — every session appends lifecycle events to `~/.claudius/crash-<PID>.log`:
+
+```
+[2026-08-28T17:42:16.046Z] [START] pid=24842 heap_limit=4144MB v=2.1.88
+[2026-08-28T17:42:16.941Z] [MEM_WARN_80] heap 3320MB / 4144MB
+[2026-08-28T17:42:28.003Z] [MEM_WARN_90] heap 3730MB / 4144MB — crash imminent, writing diagnostic report
+[2026-08-28T17:42:29.105Z] [EXIT] code=1
+```
+
+**Diagnostic report** — if heap reaches 90%, or on any fatal OOM/SIGABRT, a full Node.js diagnostic report is written to `~/.claudius/crash-report-<PID>.json`. It includes JS stack trace, native backtrace, heap statistics, and environment — the same information V8 dumps to stderr, but captured to a file even when stderr is swallowed by the IDE.
+
+A missing `EXIT` entry in the log means the process was killed hard (OOM/SIGKILL) before the exit handler could run — check for a `crash-report-<PID>.json` in that case.
+
 ### Computer Use (macOS)
 
 Computer use activates automatically when the `CHICAGO_MCP` feature flag is enabled. Native addons are resolved from `source/native-addons/`. Override paths if needed:
