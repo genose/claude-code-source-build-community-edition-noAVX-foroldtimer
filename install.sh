@@ -68,7 +68,31 @@ rm -f "$TMP_TAR"
 mkdir -p "$BIN_DIR"
 cat > "$BIN_DIR/$CMD" <<WRAPPER
 #!/usr/bin/env bash
-exec node --max-old-space-size=8192 "$INSTALL_DIR/dist/cli.js" "\$@"
+# Adaptive Node.js heap: 25% of available RAM, capped 512–8192 MB.
+# Override: CLAUDIUS_MAX_HEAP_MB=<mb>
+if [ -n "\$CLAUDIUS_MAX_HEAP_MB" ]; then
+  _heap=\$CLAUDIUS_MAX_HEAP_MB
+else
+  _free_mb=0
+  if [ -f /proc/meminfo ]; then
+    _free_mb=\$(awk '/MemAvailable:/{print int(\$2/1024)}' /proc/meminfo)
+  elif command -v vm_stat &>/dev/null; then
+    _pages=\$(vm_stat | awk '/Pages free:/{gsub(/\./,"",\$3); print \$3}')
+    _psize=\$(sysctl -n hw.pagesize 2>/dev/null || echo 4096)
+    [ -n "\$_pages" ] && _free_mb=\$(( _pages * _psize / 1024 / 1024 ))
+  fi
+  if [ "\${_free_mb:-0}" -le 0 ]; then
+    _heap=2048
+  else
+    _budget=\$(( _free_mb / 4 ))
+    _running=\$(pgrep -cf "$INSTALL_DIR/dist/cli.js" 2>/dev/null || echo 0)
+    _instances=\$(( _running + 1 ))
+    _heap=\$(( _budget / _instances ))
+    [ \$_heap -gt 8192 ] && _heap=8192
+    [ \$_heap -lt 512  ] && _heap=512
+  fi
+fi
+exec node --max-old-space-size=\$_heap "$INSTALL_DIR/dist/cli.js" "\$@"
 WRAPPER
 chmod +x "$BIN_DIR/$CMD"
 

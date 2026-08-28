@@ -52,13 +52,23 @@ Remove-Item -Force $TmpTar
 # Install wrapper
 New-Item -ItemType Directory -Force -Path $BinDir | Out-Null
 $wrapper = "$BinDir\$CMD.cmd"
-Set-Content -Path $wrapper -Value "@echo off`r`nnode --max-old-space-size=8192 `"$InstallDir\dist\cli.js`" %*"
+# Adaptive heap: 25% of free RAM, capped 512-8192 MB. Override: CLAUDIUS_MAX_HEAP_MB
+$wrapperContent = @"
+@echo off
+if defined CLAUDIUS_MAX_HEAP_MB (
+  set _heap=%CLAUDIUS_MAX_HEAP_MB%
+) else (
+  for /f %%h in ('powershell -NoProfile -Command "`$f=[int]((Get-CimInstance Win32_OperatingSystem).FreePhysicalMemory/1024); `$r=([array](Get-Process node -EA 0)).Count; [math]::Max(512,[math]::Min(8192,[math]::Floor(`$f/4/(`$r+1))))"') do set _heap=%%h
+  if not defined _heap set _heap=2048
+)
+node --max-old-space-size=%_heap% "$InstallDir\dist\cli.js" %*
+"@
+Set-Content -Path $wrapper -Value $wrapperContent
 
 # Create claude.cmd -> claudius so VS Code / JetBrains extensions work without config changes.
 $claudeWrapper = "$BinDir\claude.cmd"
-$ourContent = "@echo off`r`nnode --max-old-space-size=8192 `"$InstallDir\dist\cli.js`" %*"
-if (-not (Test-Path $claudeWrapper) -or (Get-Content $claudeWrapper -Raw) -eq $ourContent) {
-    Set-Content -Path $claudeWrapper -Value $ourContent
+if (-not (Test-Path $claudeWrapper) -or (Get-Content $claudeWrapper -Raw) -like "*claudius*") {
+    Set-Content -Path $claudeWrapper -Value $wrapperContent
     Write-Host "    Also created: $claudeWrapper (claude -> claudius)"
 } else {
     Write-Host "    NOTE: $claudeWrapper already exists with different content — skipping."

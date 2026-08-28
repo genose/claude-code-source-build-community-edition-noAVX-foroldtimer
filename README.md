@@ -10,7 +10,7 @@ See: [anthropics/claude-code#33153](https://github.com/anthropics/claude-code/is
 
 ## Install
 
-Clones, builds, and installs the `claudius` command. Requires **Node.js >= 20** and **git**.
+Downloads a pre-built release and installs the `claudius` command. Requires **Node.js >= 20** only — no git, no build step.
 
 **macOS / Linux:**
 ```bash
@@ -43,7 +43,7 @@ $env:CLAUDIUS_INSTALL_DIR="C:\tools\claudius"; $env:CLAUDIUS_BIN_DIR="C:\tools\b
 
 ## Update / Reinstall
 
-Re-run the same install command — it detects an existing install, pulls the latest commits, rebuilds, and updates the wrapper:
+Re-run the same install command — it downloads the latest pre-built release and replaces the existing install:
 
 **macOS / Linux:**
 ```bash
@@ -55,19 +55,11 @@ curl -fsSL https://raw.githubusercontent.com/genose/claude-code-source-build-com
 irm https://raw.githubusercontent.com/genose/claude-code-source-build-community-edition-noAVX-foroldtimer/noavx_esbuild/install.ps1 | iex
 ```
 
-Or if you already cloned locally:
-```bash
-cd ~/.claudius   # or your custom CLAUDIUS_INSTALL_DIR
-git pull
-npm install
-npm run build
-```
-
 ## Prerequisites
 
 - Node.js >= 20
-- git
-- npm
+
+> **To build from source** (developers only): also requires `git` and `npm`.
 
 ## Build from source
 
@@ -113,6 +105,25 @@ node dist/cli.js
 ```
 
 Or use the installed `claudius` command if you ran `install.sh` / `install.ps1`.
+
+## Memory
+
+The `claudius` wrapper automatically limits the Node.js heap to a fair share of available RAM so it stays safe on small machines and doesn't hog resources when multiple instances run simultaneously:
+
+- **Budget:** 25% of available RAM at launch time
+- **Per-instance cap:** budget ÷ number of already-running `claudius` processes (so N instances share the budget evenly)
+- **Hard cap:** 8192 MB (even if budget would allow more)
+- **Floor:** 512 MB (minimum usable heap)
+- **Detection fallback:** 2048 MB if RAM detection fails
+
+Example: 4 GB free RAM → 1024 MB budget. One instance gets 1024 MB; if a second launches it gets 512 MB (floor).
+
+**Override** — set before launching:
+```bash
+CLAUDIUS_MAX_HEAP_MB=4096 claudius
+```
+
+A memory pressure warning is printed to stderr when heap usage reaches 80% of the limit, before an OOM crash can occur.
 
 ### Computer Use (macOS)
 
