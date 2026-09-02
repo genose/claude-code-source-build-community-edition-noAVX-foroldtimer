@@ -773,16 +773,30 @@ function finalizeBuild() {
     `    process.report.filename = 'crash-report-' + process.pid + '.json';\n` +
     `  } catch (_) {}\n` +
     `  _logLine('START', 'pid=' + process.pid + ' heap_limit=' + _heapLimitMB + 'MB v=' + (globalThis.MACRO?.VERSION ?? '?'));\n` +
-    `  let _warned80 = false, _warned90 = false;\n` +
+    `  let _warned65 = false, _warned80 = false, _warned90 = false;\n` +
+    `  let _lastHeartbeat = Date.now();\n` +
     `  setInterval(() => {\n` +
     `    const _heapUsed = process.memoryUsage().heapUsed;\n` +
     `    const usedMB = Math.round(_heapUsed / 1024 / 1024);\n` +
+    `    const now = Date.now();\n` +
+    `    if (now - _lastHeartbeat >= 300000) {\n` +
+    `      _lastHeartbeat = now;\n` +
+    `      _logLine('MEM_HEARTBEAT', 'heap ' + usedMB + 'MB / ' + _heapLimitMB + 'MB (' + Math.round(_heapUsed / _heapLimit * 100) + '%)');\n` +
+    `    }\n` +
+    `    if (!_warned65 && _heapUsed > _heapLimit * 0.65) {\n` +
+    `      _warned65 = true;\n` +
+    `      _logLine('MEM_WARN_65', 'heap ' + usedMB + 'MB / ' + _heapLimitMB + 'MB');\n` +
+    `      process.stderr.write(\n` +
+    `        '\\n\\x1b[33m⚠  claudius: heap at ' + usedMB + ' MB / ' + _heapLimitMB + ' MB (65%) — session memory growing.\\x1b[0m\\n' +\n` +
+    `        '\\x1b[33m   Use /compact to summarize context and free memory.\\x1b[0m\\n\\n'\n` +
+    `      );\n` +
+    `    }\n` +
     `    if (!_warned80 && _heapUsed > _heapLimit * 0.80) {\n` +
     `      _warned80 = true;\n` +
     `      _logLine('MEM_WARN_80', 'heap ' + usedMB + 'MB / ' + _heapLimitMB + 'MB');\n` +
     `      process.stderr.write(\n` +
-    `        '\\n\\x1b[33m⚠  claudius: heap at ' + usedMB + ' MB / ' + _heapLimitMB + ' MB — session memory high.\\x1b[0m\\n' +\n` +
-    `        '\\x1b[33m   Use /clear to free context or start a new session to avoid a crash.\\x1b[0m\\n\\n'\n` +
+    `        '\\n\\x1b[33m⚠  claudius: heap at ' + usedMB + ' MB / ' + _heapLimitMB + ' MB (80%) — session memory high.\\x1b[0m\\n' +\n` +
+    `        '\\x1b[33m   Run /compact now or start a new session to avoid a crash.\\x1b[0m\\n\\n'\n` +
     `      );\n` +
     `    }\n` +
     `    if (!_warned90 && _heapUsed > _heapLimit * 0.90) {\n` +
@@ -790,12 +804,12 @@ function finalizeBuild() {
     `      _logLine('MEM_WARN_90', 'heap ' + usedMB + 'MB / ' + _heapLimitMB + 'MB — crash imminent, writing diagnostic report');\n` +
     `      try { process.report.writeReport(); } catch (_) {}\n` +
     `      process.stderr.write(\n` +
-    `        '\\n\\x1b[31m✖  claudius: heap at ' + usedMB + ' MB / ' + _heapLimitMB + ' MB — crash imminent!\\x1b[0m\\n' +\n` +
+    `        '\\n\\x1b[31m✖  claudius: heap at ' + usedMB + ' MB / ' + _heapLimitMB + ' MB (90%) — crash imminent!\\x1b[0m\\n' +\n` +
     `        '\\x1b[31m   Diagnostic report written to ' + _logDir + '\\x1b[0m\\n' +\n` +
     `        '\\x1b[31m   Start a new session immediately.\\x1b[0m\\n\\n'\n` +
     `      );\n` +
     `    }\n` +
-    `  }, 15000).unref();\n` +
+    `  }, 5000).unref();\n` +
     `  process.on('exit', (code) => {\n` +
     `    _logLine('EXIT', 'code=' + code);\n` +
     `  });\n` +
