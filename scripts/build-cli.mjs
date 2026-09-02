@@ -774,6 +774,7 @@ function finalizeBuild() {
     `  } catch (_) {}\n` +
     `  _logLine('START', 'pid=' + process.pid + ' heap_limit=' + _heapLimitMB + 'MB v=' + (globalThis.MACRO?.VERSION ?? '?'));\n` +
     `  let _warned65 = false, _warned80 = false, _warned90 = false;\n` +
+    `  let _lastCompactRemind = 0;\n` +
     `  let _lastHeartbeat = Date.now();\n` +
     `  setInterval(() => {\n` +
     `    const _heapUsed = process.memoryUsage().heapUsed;\n` +
@@ -785,10 +786,18 @@ function finalizeBuild() {
     `    }\n` +
     `    if (!_warned65 && _heapUsed > _heapLimit * 0.65) {\n` +
     `      _warned65 = true;\n` +
+    `      _lastCompactRemind = now;\n` +
     `      _logLine('MEM_WARN_65', 'heap ' + usedMB + 'MB / ' + _heapLimitMB + 'MB');\n` +
     `      process.stderr.write(\n` +
     `        '\\n\\x1b[33m⚠  claudius: heap at ' + usedMB + ' MB / ' + _heapLimitMB + ' MB (65%) — session memory growing.\\x1b[0m\\n' +\n` +
-    `        '\\x1b[33m   Use /compact to summarize context and free memory.\\x1b[0m\\n\\n'\n` +
+    `        '\\x1b[33m   Run /compact to summarize context and free memory.\\x1b[0m\\n\\n'\n` +
+    `      );\n` +
+    `    }\n` +
+    `    if (_warned65 && !_warned80 && _heapUsed > _heapLimit * 0.65 && now - _lastCompactRemind >= 600000) {\n` +
+    `      _lastCompactRemind = now;\n` +
+    `      _logLine('MEM_WARN_65', 'heap ' + usedMB + 'MB / ' + _heapLimitMB + 'MB (repeat reminder)');\n` +
+    `      process.stderr.write(\n` +
+    `        '\\n\\x1b[33m⚠  claudius: still at ' + usedMB + ' MB / ' + _heapLimitMB + ' MB — run /compact to free memory and avoid a crash.\\x1b[0m\\n\\n'\n` +
     `      );\n` +
     `    }\n` +
     `    if (!_warned80 && _heapUsed > _heapLimit * 0.80) {\n` +
