@@ -225,6 +225,7 @@ export function stripReinjectedAttachments(messages: Message[]): Message[] {
 export const ERROR_MESSAGE_NOT_ENOUGH_MESSAGES =
   'Not enough messages to compact.'
 const MAX_PTL_RETRIES = 3
+const MAX_API_ERROR_RETRIES = 3
 const PTL_RETRY_MARKER = '[earlier conversation truncated for compaction retry]'
 
 /**
@@ -447,6 +448,7 @@ export async function compactConversation(
     let summaryResponse: AssistantMessage
     let summary: string | null
     let ptlAttempts = 0
+    let apiErrorAttempts = 0
     for (;;) {
       summaryResponse = await streamCompactSummary({
         messages: messagesToSummarize,
@@ -457,7 +459,23 @@ export async function compactConversation(
         cacheSafeParams: retryCacheSafeParams,
       })
       summary = getAssistantMessageText(summaryResponse)
-      if (!summary?.startsWith(PROMPT_TOO_LONG_ERROR_MESSAGE)) break
+      if (!summary?.startsWith(PROMPT_TOO_LONG_ERROR_MESSAGE)) {
+        // Retry transient API errors (overload, 5xx, timeout) with backoff
+        if (summary && startsWithApiErrorPrefix(summary)) {
+          apiErrorAttempts++
+          if (apiErrorAttempts <= MAX_API_ERROR_RETRIES) {
+            logEvent('tengu_compact_api_error_retry', {
+              attempt: apiErrorAttempts as unknown as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
+              preCompactTokenCount,
+              promptCacheSharingEnabled,
+            })
+            logForDebugging(`Compact API error (attempt ${apiErrorAttempts}/${MAX_API_ERROR_RETRIES}), retrying in ${apiErrorAttempts * 2}s: ${summary}`, { level: 'warn' })
+            await new Promise(resolve => setTimeout(resolve, apiErrorAttempts * 2000))
+            continue
+          }
+        }
+        break
+      }
 
       // CC-1180: compact request itself hit prompt-too-long. Truncate the
       // oldest API-round groups and retry rather than leaving the user stuck.
@@ -859,6 +877,7 @@ export async function partialCompactConversation(
     let summaryResponse: AssistantMessage
     let summary: string | null
     let ptlAttempts = 0
+    let apiErrorAttempts = 0
     for (;;) {
       summaryResponse = await streamCompactSummary({
         messages: apiMessages,
@@ -869,7 +888,23 @@ export async function partialCompactConversation(
         cacheSafeParams: retryCacheSafeParams,
       })
       summary = getAssistantMessageText(summaryResponse)
-      if (!summary?.startsWith(PROMPT_TOO_LONG_ERROR_MESSAGE)) break
+      if (!summary?.startsWith(PROMPT_TOO_LONG_ERROR_MESSAGE)) {
+        // Retry transient API errors (overload, 5xx, timeout) with backoff
+        if (summary && startsWithApiErrorPrefix(summary)) {
+          apiErrorAttempts++
+          if (apiErrorAttempts <= MAX_API_ERROR_RETRIES) {
+            logEvent('tengu_compact_api_error_retry', {
+              attempt: apiErrorAttempts as unknown as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
+              preCompactTokenCount,
+              promptCacheSharingEnabled: false,
+            })
+            logForDebugging(`Partial compact API error (attempt ${apiErrorAttempts}/${MAX_API_ERROR_RETRIES}), retrying in ${apiErrorAttempts * 2}s: ${summary}`, { level: 'warn' })
+            await new Promise(resolve => setTimeout(resolve, apiErrorAttempts * 2000))
+            continue
+          }
+        }
+        break
+      }
 
       ptlAttempts++
       const truncated =
