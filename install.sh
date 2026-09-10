@@ -68,7 +68,7 @@ rm -f "$TMP_TAR"
 mkdir -p "$BIN_DIR"
 cat > "$BIN_DIR/$CMD" <<WRAPPER
 #!/usr/bin/env bash
-# Adaptive Node.js heap: 25% of available RAM, capped 512–8192 MB.
+# Adaptive Node.js heap: 25% of available RAM, capped 512–16384 MB.
 # Override: CLAUDIUS_MAX_HEAP_MB=<mb>
 if [ -n "\$CLAUDIUS_MAX_HEAP_MB" ]; then
   _heap=\$CLAUDIUS_MAX_HEAP_MB
@@ -88,7 +88,7 @@ else
     _running=\$(pgrep -cf "$INSTALL_DIR/dist/cli.js" 2>/dev/null || echo 0)
     _instances=\$(( _running + 1 ))
     _heap=\$(( _budget / _instances ))
-    [ \$_heap -gt 8192 ] && _heap=8192
+    [ \$_heap -gt 16384 ] && _heap=16384
     [ \$_heap -lt 512  ] && _heap=512
   fi
 fi

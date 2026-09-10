@@ -52,13 +52,13 @@ Remove-Item -Force $TmpTar
 # Install wrapper
 New-Item -ItemType Directory -Force -Path $BinDir | Out-Null
 $wrapper = "$BinDir\$CMD.cmd"
-# Adaptive heap: 25% of free RAM, capped 512-8192 MB. Override: CLAUDIUS_MAX_HEAP_MB
+# Adaptive heap: 25% of free RAM, capped 512-16384 MB. Override: CLAUDIUS_MAX_HEAP_MB
 $wrapperContent = @"
 @echo off
 if defined CLAUDIUS_MAX_HEAP_MB (
   set _heap=%CLAUDIUS_MAX_HEAP_MB%
 ) else (
-  for /f %%h in ('powershell -NoProfile -Command "`$f=[int]((Get-CimInstance Win32_OperatingSystem).FreePhysicalMemory/1024); `$r=([array](Get-Process node -EA 0)).Count; [math]::Max(512,[math]::Min(8192,[math]::Floor(`$f/4/(`$r+1))))"') do set _heap=%%h
+  for /f %%h in ('powershell -NoProfile -Command "`$f=[int]((Get-CimInstance Win32_OperatingSystem).FreePhysicalMemory/1024); `$r=([array](Get-Process node -EA 0)).Count; [math]::Max(512,[math]::Min(16384,[math]::Floor(`$f/4/(`$r+1))))"') do set _heap=%%h
   if not defined _heap set _heap=2048
 )
 node --max-old-space-size=%_heap% "$InstallDir\dist\cli.js" %*

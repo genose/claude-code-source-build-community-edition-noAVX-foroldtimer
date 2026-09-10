@@ -3807,6 +3807,11 @@ async function run(): Promise<CommanderCommand> {
     }
   }).version(`${MACRO.VERSION} (Claude Code)`, '-v, --version', 'Output the version number');
 
+  program.addHelpText('after', `
+Environment variables (Community Edition):
+  CLAUDIUS_MAX_HEAP_MB=<mb>   Override Node.js heap limit (default: 25% of free RAM, cap 16384 MB)
+                               Example: CLAUDIUS_MAX_HEAP_MB=8192 claudius`);
+
   // Worktree flags
   program.option('-w, --worktree [name]', 'Create a new git worktree for this session (optionally specify a name)');
   program.option('--tmux', 'Create a tmux session for the worktree (requires --worktree). Uses iTerm2 native panes when available; use --tmux=classic for traditional tmux.');

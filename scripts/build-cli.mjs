@@ -773,7 +773,7 @@ function finalizeBuild() {
     `    process.report.filename = 'crash-report-' + process.pid + '.json';\n` +
     `  } catch (_) {}\n` +
     `  _logLine('START', 'pid=' + process.pid + ' heap_limit=' + _heapLimitMB + 'MB v=' + (globalThis.MACRO?.VERSION ?? '?'));\n` +
-    `  let _warned65 = false, _warned80 = false, _warned90 = false;\n` +
+    `  let _warned65 = false, _warned80 = false, _warned90 = false, _warned95 = false;\n` +
     `  let _lastCompactRemind = 0;\n` +
     `  let _lastHeartbeat = Date.now();\n` +
     `  setInterval(() => {\n` +
@@ -814,9 +814,17 @@ function finalizeBuild() {
     `      try { process.report.writeReport(); } catch (_) {}\n` +
     `      process.stderr.write(\n` +
     `        '\\n\\x1b[31m✖  claudius: heap at ' + usedMB + ' MB / ' + _heapLimitMB + ' MB (90%) — crash imminent!\\x1b[0m\\n' +\n` +
-    `        '\\x1b[31m   Diagnostic report written to ' + _logDir + '\\x1b[0m\\n' +\n` +
-    `        '\\x1b[31m   Start a new session immediately.\\x1b[0m\\n\\n'\n` +
+    `        '\\x1b[31m   Run /compact NOW or claudius will shut down at 95% to save your session.\\x1b[0m\\n\\n'\n` +
     `      );\n` +
+    `    }\n` +
+    `    if (!_warned95 && _heapUsed > _heapLimit * 0.95) {\n` +
+    `      _warned95 = true;\n` +
+    `      _logLine('MEM_WARN_95', 'heap ' + usedMB + 'MB / ' + _heapLimitMB + 'MB — graceful shutdown to preserve session');\n` +
+    `      process.stderr.write(\n` +
+    `        '\\n\\x1b[31m✖  claudius: heap at ' + usedMB + ' MB / ' + _heapLimitMB + ' MB (95%) — shutting down gracefully to preserve your session.\\x1b[0m\\n' +\n` +
+    `        '\\x1b[31m   Resume with: claudius --resume\\x1b[0m\\n\\n'\n` +
+    `      );\n` +
+    `      setTimeout(() => process.exit(1), 2000);\n` +
     `    }\n` +
     `  }, 5000).unref();\n` +
     `  process.on('exit', (code) => {\n` +
