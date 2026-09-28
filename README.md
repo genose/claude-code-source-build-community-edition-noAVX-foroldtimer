@@ -2,11 +2,17 @@
 
 ![](<img/2026-03-31 14-58-01-combined.gif>)
 
-Rebuilt from source maps with real source preservation for `@ant/*` packages.
+Community-maintained build of Claude Code with **Bun replaced by esbuild** — runs on CPUs without AVX/AVX2 (Intel Westmere/Nehalem, AMD pre-Bulldozer, Hyper-V/VirtualBox/KVM VMs, old-timer hardware).
 
-Community-maintained source build of Claude Code with **Bun replaced by esbuild** — runs on CPUs without AVX/AVX2 (Intel Westmere/Nehalem, AMD pre-Bulldozer, Hyper-V/VirtualBox/KVM VMs, old-timer hardware).
+**Current version: v2.1.283-rel.1**
 
-See: [anthropics/claude-code#33153](https://github.com/anthropics/claude-code/issues/33153)
+See: [anthropics/claude-code#33153](https://github.com/anthropics/claude-code/issues/33153) · [anthropics/claude-code#55520](https://github.com/anthropics/claude-code/issues/55520)
+
+## What this is (and isn't)
+
+This fork rebuilds Claude Code from source using Node.js + esbuild instead of Bun, so it runs on any x86 CPU regardless of AVX support.
+
+**Honest note on the code base:** The version number tracks upstream so the API gate passes. The underlying application code is frozen at the **v2.1.88 era** — upstream switched to a Bun-compiled binary at v2.1.126, which uses compiled JavaScriptCore bytecode. There is no way to extract TypeScript source from that binary, and npm has never shipped source maps. Upstream fixes from v2.1.126–v2.1.283 are not present in the application logic of this build. What you do get: a working Node.js build that runs on your hardware, with fresh npm dependency packages at build time, plus the memory management and branding overlay on top.
 
 ## Install
 
@@ -14,12 +20,12 @@ Downloads a pre-built release and installs the `claudius` command. Requires **No
 
 **macOS / Linux:**
 ```bash
-curl -fsSL https://raw.githubusercontent.com/genose/claude-code-source-build-community-edition-noAVX-foroldtimer/noavx_esbuild/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/genose/claude-code-source-build-community-edition-noAVX-foroldtimer/master/install.sh | bash
 ```
 
 **Windows (PowerShell):**
 ```powershell
-irm https://raw.githubusercontent.com/genose/claude-code-source-build-community-edition-noAVX-foroldtimer/noavx_esbuild/install.ps1 | iex
+irm https://raw.githubusercontent.com/genose/claude-code-source-build-community-edition-noAVX-foroldtimer/master/install.ps1 | iex
 ```
 
 After install, run `claudius` instead of `claude`.
@@ -43,17 +49,7 @@ $env:CLAUDIUS_INSTALL_DIR="C:\tools\claudius"; $env:CLAUDIUS_BIN_DIR="C:\tools\b
 
 ## Update / Reinstall
 
-Re-run the same install command — it downloads the latest pre-built release and replaces the existing install:
-
-**macOS / Linux:**
-```bash
-curl -fsSL https://raw.githubusercontent.com/genose/claude-code-source-build-community-edition-noAVX-foroldtimer/noavx_esbuild/install.sh | bash
-```
-
-**Windows (PowerShell):**
-```powershell
-irm https://raw.githubusercontent.com/genose/claude-code-source-build-community-edition-noAVX-foroldtimer/noavx_esbuild/install.ps1 | iex
-```
+Re-run the same install command — it downloads the latest pre-built release and replaces the existing install.
 
 ## Prerequisites
 
@@ -65,7 +61,7 @@ irm https://raw.githubusercontent.com/genose/claude-code-source-build-community-
 
 ```bash
 # 1. Clone
-git clone --branch noavx_esbuild \
+git clone --branch master \
   https://github.com/genose/claude-code-source-build-community-edition-noAVX-foroldtimer.git
 cd claude-code-source-build-community-edition-noAVX-foroldtimer
 
@@ -112,7 +108,7 @@ The `claudius` wrapper automatically limits the Node.js heap to a fair share of 
 
 - **Budget:** 25% of available RAM at launch time
 - **Per-instance cap:** budget ÷ number of already-running `claudius` processes (so N instances share the budget evenly)
-- **Hard cap:** 8192 MB (even if budget would allow more)
+- **Hard cap:** 16384 MB (even if budget would allow more)
 - **Floor:** 512 MB (minimum usable heap)
 - **Detection fallback:** 2048 MB if RAM detection fails
 
@@ -123,18 +119,26 @@ Example: 4 GB free RAM → 1024 MB budget. One instance gets 1024 MB; if a secon
 CLAUDIUS_MAX_HEAP_MB=4096 claudius
 ```
 
-A memory pressure warning is printed to stderr when heap usage reaches 80% of the limit, before an OOM crash can occur.
+Memory pressure warnings are printed to stderr at escalating thresholds:
+
+| Threshold | Message |
+|-----------|---------|
+| 65% | Warning + `/compact` advice |
+| 80% | Stronger warning |
+| 90% | Critical — diagnostic report written |
+| 95% | Graceful shutdown initiated |
 
 **Session crash log** — every session appends lifecycle events to `~/.claudius/crash-<PID>.log`:
 
 ```
-[2026-08-28T17:42:16.046Z] [START] pid=24842 heap_limit=4144MB v=2.1.88
-[2026-08-28T17:42:16.941Z] [MEM_WARN_80] heap 3320MB / 4144MB
-[2026-08-28T17:42:28.003Z] [MEM_WARN_90] heap 3730MB / 4144MB — crash imminent, writing diagnostic report
-[2026-08-28T17:42:29.105Z] [EXIT] code=1
+[2026-09-28T00:00:00.000Z] [START] pid=24842 heap_limit=4144MB v=2.1.283-rel.1
+[2026-09-28T00:00:01.000Z] [MEM_WARN_65] heap 2694MB / 4144MB — consider /compact
+[2026-09-28T00:00:02.000Z] [MEM_WARN_80] heap 3320MB / 4144MB
+[2026-09-28T00:00:03.000Z] [MEM_WARN_90] heap 3730MB / 4144MB — crash imminent, writing diagnostic report
+[2026-09-28T00:00:04.000Z] [EXIT] code=1
 ```
 
-**Diagnostic report** — if heap reaches 90%, or on any fatal OOM/SIGABRT, a full Node.js diagnostic report is written to `~/.claudius/crash-report-<PID>.json`. It includes JS stack trace, native backtrace, heap statistics, and environment — the same information V8 dumps to stderr, but captured to a file even when stderr is swallowed by the IDE.
+**Diagnostic report** — if heap reaches 90%, or on any fatal OOM/SIGABRT, a full Node.js diagnostic report is written to `~/.claudius/crash-report-<PID>.json`. It includes JS stack trace, native backtrace, heap statistics, and environment.
 
 A missing `EXIT` entry in the log means the process was killed hard (OOM/SIGKILL) before the exit handler could run — check for a `crash-report-<PID>.json` in that case.
 
@@ -216,9 +220,9 @@ install.sh               — macOS/Linux installer (sets up claudius command)
 install.ps1              — Windows installer (sets up claudius command)
 scripts/build-cli.mjs    — Build script (source map extraction + esbuild bundling)
 scripts/esbuild-runner.mjs — esbuild plugins (CJS/ESM shims, exports fix)
-source/cli.js.map         — Original source map (4756 modules)
+source/cli.js.map         — Original source map (4756 modules, v2.1.88 era)
 source/native-addons/     — Pre-built .node binaries (macOS)
-source/src/               — Overlay assets (.md skill files)
+source/src/               — Overlay source files (boot screen, version display, etc.)
 .cache/workspace/         — Extracted workspace (generated, gitignored)
 dist/                     — Build output (generated)
 ```
