@@ -184,7 +184,7 @@ const publicMacroValues = {
   VERSION: packageJson.version,
   RELEASE_NUM: packageJson.releaseNumber ?? 1,
   FEEDBACK_CHANNEL: 'https://github.com/anthropics/claude-code/issues',
-  BUILD_TIME: '2026-03-30T21:59:52Z',
+  BUILD_TIME: '2026-09-28T00:00:00Z',
   NATIVE_PACKAGE_URL: null,
   VERSION_CHANGELOG: null,
 };
