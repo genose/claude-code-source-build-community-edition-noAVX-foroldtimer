@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 set -e
 
-REPO="https://github.com/genose/claude-code-source-build-community-edition-noAVX-foroldtimer.git"
-BRANCH="noavx_esbuild"
+REPO_API="https://api.github.com/repos/genose/claude-code-source-build-community-edition-noAVX-foroldtimer"
 INSTALL_DIR="${CLAUDIUS_INSTALL_DIR:-$HOME/.claudius}"
 CMD="claudius"
 
@@ -35,42 +34,79 @@ if [ "$NODE_MAJOR" -lt 20 ]; then
   exit 1
 fi
 
-# Check git
-if ! command -v git &>/dev/null; then
-  echo "Error: git is required but not found." >&2
+# Fetch latest release asset URL
+echo "==> Fetching latest release..."
+ASSET_URL=$(curl -fsSL "$REPO_API/releases/latest" | python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+for a in data.get('assets', []):
+    if a['name'].endswith('dist.tar.gz'):
+        print(a['browser_download_url'])
+        break
+")
+
+if [ -z "$ASSET_URL" ]; then
+  echo "Error: could not find dist tarball in latest release." >&2
   exit 1
 fi
 
-# Clone or update
-if [ -d "$INSTALL_DIR/.git" ]; then
-  echo "==> Updating existing install at $INSTALL_DIR"
-  git -C "$INSTALL_DIR" fetch origin "$BRANCH"
-  git -C "$INSTALL_DIR" checkout "$BRANCH"
-  git -C "$INSTALL_DIR" reset --hard "origin/$BRANCH"
-else
-  echo "==> Cloning repo..."
-  git clone --branch "$BRANCH" --depth 1 "$REPO" "$INSTALL_DIR"
-fi
+TAG=$(curl -fsSL "$REPO_API/releases/latest" | python3 -c "import json,sys; print(json.load(sys.stdin)['tag_name'])" 2>/dev/null || echo "unknown")
+echo "    Release     : $TAG"
+echo ""
 
-# Install dependencies (esbuild etc.)
-echo "==> Installing dependencies..."
-cd "$INSTALL_DIR"
-npm install --silent
-
-# Build
-echo "==> Building..."
-node scripts/build-cli.mjs
+# Download and extract
+mkdir -p "$INSTALL_DIR"
+TMP_TAR=$(mktemp /tmp/claudius-dist.XXXXXX.tar.gz)
+echo "==> Downloading pre-built dist..."
+curl -fsSL --progress-bar -o "$TMP_TAR" "$ASSET_URL"
+echo "==> Extracting..."
+rm -rf "$INSTALL_DIR/dist"
+tar -xzf "$TMP_TAR" -C "$INSTALL_DIR"
+rm -f "$TMP_TAR"
 
 # Install wrapper
 mkdir -p "$BIN_DIR"
 cat > "$BIN_DIR/$CMD" <<WRAPPER
 #!/usr/bin/env bash
-exec node "$INSTALL_DIR/dist/cli.js" "\$@"
+# Adaptive Node.js heap: 25% of available RAM, capped 512–16384 MB.
+# Override: CLAUDIUS_MAX_HEAP_MB=<mb>
+if [ -n "\$CLAUDIUS_MAX_HEAP_MB" ]; then
+  _heap=\$CLAUDIUS_MAX_HEAP_MB
+else
+  _free_mb=0
+  if [ -f /proc/meminfo ]; then
+    _free_mb=\$(awk '/MemAvailable:/{print int(\$2/1024)}' /proc/meminfo)
+  elif command -v vm_stat &>/dev/null; then
+    _pages=\$(vm_stat | awk '/Pages free:/{gsub(/\./,"",\$3); print \$3}')
+    _psize=\$(sysctl -n hw.pagesize 2>/dev/null || echo 4096)
+    [ -n "\$_pages" ] && _free_mb=\$(( _pages * _psize / 1024 / 1024 ))
+  fi
+  if [ "\${_free_mb:-0}" -le 0 ]; then
+    _heap=2048
+  else
+    _budget=\$(( _free_mb / 4 ))
+    _running=\$(pgrep -cf "$INSTALL_DIR/dist/cli.js" 2>/dev/null || echo 0)
+    _instances=\$(( _running + 1 ))
+    _heap=\$(( _budget / _instances ))
+    [ \$_heap -gt 16384 ] && _heap=16384
+    [ \$_heap -lt 512  ] && _heap=512
+  fi
+fi
+exec node --max-old-space-size=\$_heap "$INSTALL_DIR/dist/cli.js" "\$@"
 WRAPPER
 chmod +x "$BIN_DIR/$CMD"
 
+# Symlink 'claude' -> 'claudius' so VS Code / JetBrains extensions work without config changes.
+if [ ! -e "$BIN_DIR/claude" ] || [ -L "$BIN_DIR/claude" ]; then
+  ln -sf "$CMD" "$BIN_DIR/claude"
+  echo "    Symlinked   : $BIN_DIR/claude -> $CMD"
+else
+  echo "    NOTE: $BIN_DIR/claude already exists and is not a symlink — skipping."
+  echo "          VS Code extensions may use the official claude binary on that path."
+fi
+
 echo ""
-echo "==> Done! Run: $CMD"
+echo "==> Done! Run: $CMD  (or: claude)"
 echo ""
 
 # PATH hint

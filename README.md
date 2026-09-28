@@ -10,7 +10,7 @@ See: [anthropics/claude-code#33153](https://github.com/anthropics/claude-code/is
 
 ## Install
 
-Clones, builds, and installs the `claudius` command. Requires **Node.js >= 20** and **git**.
+Downloads a pre-built release and installs the `claudius` command. Requires **Node.js >= 20** only — no git, no build step.
 
 **macOS / Linux:**
 ```bash
@@ -28,7 +28,7 @@ Default install locations:
 
 | Platform | Install dir | Command |
 |----------|-------------|---------|
-| macOS | `~/.claudius` | `/usr/local/bin/claudius` |
+| macOS | `~/.claudius` | `/usr/local/bin/claudius` (if writable, else `~/.local/bin/claudius`) |
 | Linux | `~/.claudius` | `~/.local/bin/claudius` |
 | Windows | `%USERPROFILE%\.claudius` | `%USERPROFILE%\.local\bin\claudius.cmd` |
 
@@ -41,11 +41,25 @@ CLAUDIUS_INSTALL_DIR=~/tools/claudius CLAUDIUS_BIN_DIR=~/bin bash install.sh
 $env:CLAUDIUS_INSTALL_DIR="C:\tools\claudius"; $env:CLAUDIUS_BIN_DIR="C:\tools\bin"; irm ... | iex
 ```
 
+## Update / Reinstall
+
+Re-run the same install command — it downloads the latest pre-built release and replaces the existing install:
+
+**macOS / Linux:**
+```bash
+curl -fsSL https://raw.githubusercontent.com/genose/claude-code-source-build-community-edition-noAVX-foroldtimer/noavx_esbuild/install.sh | bash
+```
+
+**Windows (PowerShell):**
+```powershell
+irm https://raw.githubusercontent.com/genose/claude-code-source-build-community-edition-noAVX-foroldtimer/noavx_esbuild/install.ps1 | iex
+```
+
 ## Prerequisites
 
 - Node.js >= 20
-- git
-- npm
+
+> **To build from source** (developers only): also requires `git` and `npm`.
 
 ## Build from source
 
@@ -59,7 +73,8 @@ cd claude-code-source-build-community-edition-noAVX-foroldtimer
 npm install
 
 # 3. Build (production, minified)
-node scripts/build-cli.mjs
+npm run build
+# equivalent: node scripts/build-cli.mjs
 
 # Development build (unminified, faster)
 node scripts/build-cli.mjs --no-minify
@@ -72,6 +87,17 @@ Output: `dist/cli.js` (entry point) + `dist/cli.bundle/` (bundle directory).
 
 The first build auto-installs ~80 overlay npm packages into `.cache/workspace/`. Subsequent builds skip this step automatically.
 
+> **Note:** The build parses a 57 MB source map (`source/cli.js.map`) once and caches it in memory for the duration of the build. On machines with < 2 GB of free RAM, Node.js may run out of heap. If you see an OOM crash, increase the heap limit:
+> ```bash
+> NODE_OPTIONS=--max-old-space-size=4096 npm run build
+> ```
+
+### Verify
+
+```bash
+node dist/cli.js --version
+```
+
 ## Run
 
 ```bash
@@ -79,6 +105,38 @@ node dist/cli.js
 ```
 
 Or use the installed `claudius` command if you ran `install.sh` / `install.ps1`.
+
+## Memory
+
+The `claudius` wrapper automatically limits the Node.js heap to a fair share of available RAM so it stays safe on small machines and doesn't hog resources when multiple instances run simultaneously:
+
+- **Budget:** 25% of available RAM at launch time
+- **Per-instance cap:** budget ÷ number of already-running `claudius` processes (so N instances share the budget evenly)
+- **Hard cap:** 8192 MB (even if budget would allow more)
+- **Floor:** 512 MB (minimum usable heap)
+- **Detection fallback:** 2048 MB if RAM detection fails
+
+Example: 4 GB free RAM → 1024 MB budget. One instance gets 1024 MB; if a second launches it gets 512 MB (floor).
+
+**Override** — set before launching:
+```bash
+CLAUDIUS_MAX_HEAP_MB=4096 claudius
+```
+
+A memory pressure warning is printed to stderr when heap usage reaches 80% of the limit, before an OOM crash can occur.
+
+**Session crash log** — every session appends lifecycle events to `~/.claudius/crash-<PID>.log`:
+
+```
+[2026-08-28T17:42:16.046Z] [START] pid=24842 heap_limit=4144MB v=2.1.88
+[2026-08-28T17:42:16.941Z] [MEM_WARN_80] heap 3320MB / 4144MB
+[2026-08-28T17:42:28.003Z] [MEM_WARN_90] heap 3730MB / 4144MB — crash imminent, writing diagnostic report
+[2026-08-28T17:42:29.105Z] [EXIT] code=1
+```
+
+**Diagnostic report** — if heap reaches 90%, or on any fatal OOM/SIGABRT, a full Node.js diagnostic report is written to `~/.claudius/crash-report-<PID>.json`. It includes JS stack trace, native backtrace, heap statistics, and environment — the same information V8 dumps to stderr, but captured to a file even when stderr is swallowed by the IDE.
+
+A missing `EXIT` entry in the log means the process was killed hard (OOM/SIGKILL) before the exit handler could run — check for a `crash-report-<PID>.json` in that case.
 
 ### Computer Use (macOS)
 
@@ -90,11 +148,43 @@ COMPUTER_USE_INPUT_NODE_PATH="/path/to/computer-use-input.node" \
 node dist/cli.js
 ```
 
+## VS Code / IDE extensions
+
+The official Claude Code VS Code and JetBrains extensions internally invoke the `claude` CLI binary — which ships with **Bun**, and Bun requires AVX. On old-timer CPUs the extension will crash on startup.
+
+### Automatic fix (install.sh / install.ps1)
+
+The installer automatically creates a `claude` symlink (macOS/Linux) or `claude.cmd` wrapper (Windows) alongside `claudius` in the same bin directory. VS Code extensions find it with **no configuration change needed**.
+
+- If a real `claude` binary already exists at that path, the installer skips it and prints a notice.
+
+### Manual fix
+
+If you need to point the extension explicitly:
+
+1. Open **Settings** → search for `claude code executable`
+2. Set **Claude Code › Executable Path** to:
+
+| Platform | Path |
+|----------|------|
+| macOS (default) | `/usr/local/bin/claudius` |
+| macOS / Linux (fallback) | `~/.local/bin/claudius` |
+| Windows | `%USERPROFILE%\.local\bin\claudius.cmd` |
+
+Or in `settings.json`:
+```json
+{
+  "claude.executablePath": "/usr/local/bin/claudius"
+}
+```
+
+> **Why this works:** `claudius` is the same Claude Code codebase rebuilt with **esbuild instead of Bun** — no AVX instructions, runs on any x86 CPU from Westmere/Nehalem onwards.
+
 ## Clean rebuild
 
 ```bash
 rm -f .cache/workspace/.prepared.json
-node scripts/build-cli.mjs
+npm run build
 ```
 
 ## Feature flags

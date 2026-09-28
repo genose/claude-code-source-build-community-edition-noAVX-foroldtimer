@@ -9,13 +9,13 @@ export function WelcomeV2() {
   if (env.terminal === "Apple_Terminal") {
     let t0;
     if ($[0] !== theme) {
-      t0 = <AppleTerminalWelcomeV2 theme={theme} welcomeMessage="Welcome to Claude Code" />;
+      t0 = <AppleTerminalWelcomeV2 theme={theme} welcomeMessage="Welcome to Claudius (Claude Code)" />;
       $[0] = theme;
       $[1] = t0;
     } else {
       t0 = $[1];
     }
-    return t0;
+    return <Box flexDirection="column">{t0}<Text dimColor={true}>Community Edition no-AVX · Maintained by genose.org</Text></Box>;
   }
   if (["light", "light-daltonized", "light-ansi"].includes(theme)) {
     let t0;
@@ -28,7 +28,7 @@ export function WelcomeV2() {
     let t7;
     let t8;
     if ($[2] === Symbol.for("react.memo_cache_sentinel")) {
-      t0 = <Text><Text color="claude">{"Welcome to Claude Code"} </Text><Text dimColor={true}>v{MACRO.VERSION} </Text></Text>;
+      t0 = <Text><Text color="claude">{"Welcome to Claudius (Claude Code)"} </Text><Text dimColor={true}>v{MACRO.VERSION} · Community Edition no-AVX </Text></Text>;
       t1 = <Text>{"\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026"}</Text>;
       t2 = <Text>{"                                                          "}</Text>;
       t3 = <Text>{"                                                          "}</Text>;
@@ -103,7 +103,7 @@ export function WelcomeV2() {
     } else {
       t15 = $[17];
     }
-    return t15;
+    return <Box flexDirection="column">{t15}<Text dimColor={true}>Community Edition no-AVX · Maintained by genose.org</Text></Box>;
   }
   let t0;
   let t1;
@@ -113,7 +113,7 @@ export function WelcomeV2() {
   let t5;
   let t6;
   if ($[18] === Symbol.for("react.memo_cache_sentinel")) {
-    t0 = <Text><Text color="claude">{"Welcome to Claude Code"} </Text><Text dimColor={true}>v{MACRO.VERSION} </Text></Text>;
+    t0 = <Text><Text color="claude">{"Welcome to Claudius (Claude Code)"} </Text><Text dimColor={true}>v{MACRO.VERSION} · Community Edition no-AVX </Text></Text>;
     t1 = <Text>{"\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026"}</Text>;
     t2 = <Text>{"                                                          "}</Text>;
     t3 = <Text>{"     *                                       \u2588\u2588\u2588\u2588\u2588\u2593\u2593\u2591     "}</Text>;
@@ -194,7 +194,7 @@ export function WelcomeV2() {
   } else {
     t16 = $[34];
   }
-  return t16;
+  return <Box flexDirection="column">{t16}<Text dimColor={true}>Community Edition no-AVX · Maintained by genose.org</Text></Box>;
 }
 type AppleTerminalWelcomeV2Props = {
   theme: string;
@@ -218,7 +218,7 @@ function AppleTerminalWelcomeV2(t0) {
     }
     let t2;
     if ($[2] === Symbol.for("react.memo_cache_sentinel")) {
-      t2 = <Text dimColor={true}>v{MACRO.VERSION} </Text>;
+      t2 = <Text dimColor={true}>v{MACRO.VERSION} · Community Edition no-AVX </Text>;
       $[2] = t2;
     } else {
       t2 = $[2];
@@ -329,7 +329,7 @@ function AppleTerminalWelcomeV2(t0) {
   }
   let t2;
   if ($[24] === Symbol.for("react.memo_cache_sentinel")) {
-    t2 = <Text dimColor={true}>v{MACRO.VERSION} </Text>;
+    t2 = <Text dimColor={true}>v{MACRO.VERSION} · Community Edition no-AVX </Text>;
     $[24] = t2;
   } else {
     t2 = $[24];

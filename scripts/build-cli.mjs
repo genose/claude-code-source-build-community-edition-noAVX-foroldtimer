@@ -182,8 +182,9 @@ const publicMacroValues = {
   PACKAGE_URL: packageJson.name,
   README_URL: 'https://code.claude.com/docs/en/overview',
   VERSION: packageJson.version,
+  RELEASE_NUM: packageJson.releaseNumber ?? 1,
   FEEDBACK_CHANNEL: 'https://github.com/anthropics/claude-code/issues',
-  BUILD_TIME: '2026-03-30T21:59:52Z',
+  BUILD_TIME: '2026-09-28T00:00:00Z',
   NATIVE_PACKAGE_URL: null,
   VERSION_CHANGELOG: null,
 };
@@ -747,6 +748,89 @@ function finalizeBuild() {
     `  },\n` +
     `});\n` +
     `globalThis.MACRO ??= Object.freeze(${JSON.stringify(publicMacroValues, null, 2)});\n` +
+    `// Session crash logger + memory pressure watcher\n` +
+    `// Per-session events → ~/.claudius/crash-<PID>.log\n` +
+    `// Fatal OOM/crash report → ~/.claudius/crash-report-<PID>.json (Node.js diagnostic)\n` +
+    `{\n` +
+    `  const { getHeapStatistics } = await import('node:v8');\n` +
+    `  const { appendFileSync, mkdirSync } = await import('node:fs');\n` +
+    `  const { homedir } = await import('node:os');\n` +
+    `  const _logDir = homedir() + '/.claudius';\n` +
+    `  const _logPath = _logDir + '/crash-' + process.pid + '.log';\n` +
+    `  const _logLine = (tag, msg) => {\n` +
+    `    try {\n` +
+    `      mkdirSync(_logDir, { recursive: true });\n` +
+    `      appendFileSync(_logPath, '[' + new Date().toISOString() + '] [' + tag + '] ' + msg + '\\n');\n` +
+    `    } catch (_) {}\n` +
+    `  };\n` +
+    `  const _heapLimit = getHeapStatistics().heap_size_limit;\n` +
+    `  const _heapLimitMB = Math.round(_heapLimit / 1024 / 1024);\n` +
+    `  // Node.js diagnostic report on fatal errors (OOM, SIGSEGV, abort) — includes JS+native backtrace\n` +
+    `  try {\n` +
+    `    mkdirSync(_logDir, { recursive: true });\n` +
+    `    process.report.reportOnFatalError = true;\n` +
+    `    process.report.directory = _logDir;\n` +
+    `    process.report.filename = 'crash-report-' + process.pid + '.json';\n` +
+    `  } catch (_) {}\n` +
+    `  _logLine('START', 'pid=' + process.pid + ' heap_limit=' + _heapLimitMB + 'MB v=' + (globalThis.MACRO?.VERSION ?? '?'));\n` +
+    `  let _warned65 = false, _warned80 = false, _warned90 = false, _warned95 = false;\n` +
+    `  let _lastCompactRemind = 0;\n` +
+    `  let _lastHeartbeat = Date.now();\n` +
+    `  setInterval(() => {\n` +
+    `    const _heapUsed = process.memoryUsage().heapUsed;\n` +
+    `    const usedMB = Math.round(_heapUsed / 1024 / 1024);\n` +
+    `    const now = Date.now();\n` +
+    `    if (now - _lastHeartbeat >= 300000) {\n` +
+    `      _lastHeartbeat = now;\n` +
+    `      _logLine('MEM_HEARTBEAT', 'heap ' + usedMB + 'MB / ' + _heapLimitMB + 'MB (' + Math.round(_heapUsed / _heapLimit * 100) + '%)');\n` +
+    `    }\n` +
+    `    if (!_warned65 && _heapUsed > _heapLimit * 0.65) {\n` +
+    `      _warned65 = true;\n` +
+    `      _lastCompactRemind = now;\n` +
+    `      _logLine('MEM_WARN_65', 'heap ' + usedMB + 'MB / ' + _heapLimitMB + 'MB');\n` +
+    `      process.stderr.write(\n` +
+    `        '\\n\\x1b[33m⚠  claudius: heap at ' + usedMB + ' MB / ' + _heapLimitMB + ' MB (65%) — session memory growing.\\x1b[0m\\n' +\n` +
+    `        '\\x1b[33m   Run /compact to summarize context and free memory.\\x1b[0m\\n\\n'\n` +
+    `      );\n` +
+    `    }\n` +
+    `    if (_warned65 && !_warned80 && _heapUsed > _heapLimit * 0.65 && now - _lastCompactRemind >= 600000) {\n` +
+    `      _lastCompactRemind = now;\n` +
+    `      _logLine('MEM_WARN_65', 'heap ' + usedMB + 'MB / ' + _heapLimitMB + 'MB (repeat reminder)');\n` +
+    `      process.stderr.write(\n` +
+    `        '\\n\\x1b[33m⚠  claudius: still at ' + usedMB + ' MB / ' + _heapLimitMB + ' MB — run /compact to free memory and avoid a crash.\\x1b[0m\\n\\n'\n` +
+    `      );\n` +
+    `    }\n` +
+    `    if (!_warned80 && _heapUsed > _heapLimit * 0.80) {\n` +
+    `      _warned80 = true;\n` +
+    `      _logLine('MEM_WARN_80', 'heap ' + usedMB + 'MB / ' + _heapLimitMB + 'MB');\n` +
+    `      process.stderr.write(\n` +
+    `        '\\n\\x1b[33m⚠  claudius: heap at ' + usedMB + ' MB / ' + _heapLimitMB + ' MB (80%) — session memory high.\\x1b[0m\\n' +\n` +
+    `        '\\x1b[33m   Run /compact now or start a new session to avoid a crash.\\x1b[0m\\n\\n'\n` +
+    `      );\n` +
+    `    }\n` +
+    `    if (!_warned90 && _heapUsed > _heapLimit * 0.90) {\n` +
+    `      _warned90 = true;\n` +
+    `      _logLine('MEM_WARN_90', 'heap ' + usedMB + 'MB / ' + _heapLimitMB + 'MB — crash imminent, writing diagnostic report');\n` +
+    `      try { process.report.writeReport(); } catch (_) {}\n` +
+    `      process.stderr.write(\n` +
+    `        '\\n\\x1b[31m✖  claudius: heap at ' + usedMB + ' MB / ' + _heapLimitMB + ' MB (90%) — crash imminent!\\x1b[0m\\n' +\n` +
+    `        '\\x1b[31m   Run /compact NOW or claudius will shut down at 95% to save your session.\\x1b[0m\\n\\n'\n` +
+    `      );\n` +
+    `    }\n` +
+    `    if (!_warned95 && _heapUsed > _heapLimit * 0.95) {\n` +
+    `      _warned95 = true;\n` +
+    `      _logLine('MEM_WARN_95', 'heap ' + usedMB + 'MB / ' + _heapLimitMB + 'MB — graceful shutdown to preserve session');\n` +
+    `      process.stderr.write(\n` +
+    `        '\\n\\x1b[31m✖  claudius: heap at ' + usedMB + ' MB / ' + _heapLimitMB + ' MB (95%) — shutting down gracefully to preserve your session.\\x1b[0m\\n' +\n` +
+    `        '\\x1b[31m   Resume with: claudius --resume\\x1b[0m\\n\\n'\n` +
+    `      );\n` +
+    `      setTimeout(() => process.exit(1), 2000);\n` +
+    `    }\n` +
+    `  }, 5000).unref();\n` +
+    `  process.on('exit', (code) => {\n` +
+    `    _logLine('EXIT', 'code=' + code);\n` +
+    `  });\n` +
+    `}\n` +
     `await import(${JSON.stringify(wrapperImportPath)});\n`;
 
   fs.mkdirSync(path.dirname(outputPath), { recursive: true });
